@@ -1,0 +1,86 @@
+#Esp32 Function
+```
+- Motor control 
+  + IO19: EN_MT - output
+  + IO18: PWM1 - output
+  + IO15: PWM2 - output
+- USB debug: uart1
+- Read sensor: 
+  + IO32: AI1 - analog input
+  + IO33: AI2 - analog input
+- Read limit switch:
+  + IO26: LS2 - digital input
+  + IO27: LS1 - digital input
+- QR code: uart2
+```
+
+# lib:
+- sensor: 
+  + sort
+  + filter
+  + median
+- QR code:
+  + qrcode
+  + qrparser
+- motor control:
+  + open
+  + close
+  + stop
+  + detecTarget
+- limit switch:
+  + readLimitSwitch
+- debug:
+  + serialRead
+  + handleSerial
+  + handleCommand
+  + handleMessage
+
+--- Motor control ---
+// Basic sketch for trying out the Adafruit DRV8871 Breakout
+
+#define MOTOR_IN1 9
+#define MOTOR_IN2 10
+
+void setup() {
+  Serial.begin(9600);
+
+  Serial.println("DRV8871 test");
+  
+  pinMode(MOTOR_IN1, OUTPUT);
+  pinMode(MOTOR_IN2, OUTPUT);
+}
+
+void loop() {
+
+  // ramp up forward
+  digitalWrite(MOTOR_IN1, LOW);
+  for (int i=0; i<255; i++) {
+    analogWrite(MOTOR_IN2, i);
+    delay(10);
+  }
+
+  // forward full speed for one second
+  delay(1000);
+  
+  // ramp down forward
+  for (int i=255; i>=0; i--) {
+    analogWrite(MOTOR_IN2, i);
+    delay(10);
+  }
+
+  // ramp up backward
+  digitalWrite(MOTOR_IN2, LOW);
+  for (int i=0; i<255; i++) {
+    analogWrite(MOTOR_IN1, i);
+    delay(10);
+  }
+
+  // backward full speed for one second
+  delay(1000);
+
+  // ramp down backward
+  for (int i=255; i>=0; i--) {
+    analogWrite(MOTOR_IN1, i);
+    delay(10);
+  }
+}
