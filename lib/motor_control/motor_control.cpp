@@ -13,17 +13,19 @@ MotorControl::MotorControl(uint8_t  pwm1Pin, uint8_t pwm2Pin, uint8_t enPin, uin
     pinMode(_enPin, OUTPUT);
 }
 
-float MotorControl::detecTarget(int distanceCM) {
-
-    return 0;
+uint8_t MotorControl::detecTarget(uint8_t maxSpeed, uint8_t distance) {
+    if (distance > 60) target = maxSpeed;
+	else if (distance < 60 && distance > 30) target = (distance*maxSpeed)/60;
+	else target = 0;
+	return target;
 }
 
-void MotorControl::open(int speed) {
+void MotorControl::open(uint8_t speed) {
     ledcWrite(PWM_CHANNEL1, speed);
     ledcWrite(PWM_CHANNEL2, 0);
 }
 
-void MotorControl::close(int speed) {
+void MotorControl::close(uint8_t speed) {
     ledcWrite(PWM_CHANNEL1, 0);
     ledcWrite(PWM_CHANNEL2, speed);
 }

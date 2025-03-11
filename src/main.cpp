@@ -6,51 +6,56 @@
 #include "info.h"
 #include "distance_sensor.h"
 #include "motor_control.h"
+#include "handle_serial.h"
 
 DistanceSensor BACKWARD_SENSOR(ADC1_PIN, 1080);
 DistanceSensor FORWARD_SENSOR(ADC2_PIN, 1080);
 
 MotorControl motorControl(PWM1_PIN, PWM2_PIN,EN_MT_PIN, PWM_FREQ, PWM_RESOLUTION);
 
-InfoType boxInfo;
+HandleSerial handleSerial;
 
 TaskHandle_t motorTaskHandle = NULL;
 TaskHandle_t sensorTaskHandle = NULL;
 TaskHandle_t qrTaskHandle = NULL;
+TaskHandle_t handleMesTaskHandle = NULL;
 
 QueueHandle_t receiveMsgQueue = NULL;
 QueueHandle_t sendMsgQueue = NULL;
 
 void init_peripherals() {
-    // Cấu hình GPIO
-    pinMode(EN_MT_PIN, OUTPUT);
+    Serial.begin(UART_BAUD_RATE);
+    Serial2.begin(UART_BAUD_RATE);
+    if (!Serial) {
+        Serial.println("Serial not started");
+        while (1);
+    }
+
     pinMode(LS1_PIN, INPUT_PULLUP);
     pinMode(LS2_PIN, INPUT_PULLUP);
-
-    // Cấu hình PWM
-    ledcSetup(PWM_CHANNEL1, PWM_FREQ, PWM_RESOLUTION);
-    ledcSetup(PWM_CHANNEL2, PWM_FREQ, PWM_RESOLUTION);
-    ledcAttachPin(PWM1_PIN, PWM_CHANNEL1);
-    ledcAttachPin(PWM2_PIN, PWM_CHANNEL2);
-
-    // Cấu hình ADC (Arduino tự động xử lý)
-    analogReadResolution(12);  // 12-bit ADC
-
-    // Cấu hình UART1 cho debug (Serial)
-    Serial.begin(UART_BAUD_RATE);
-
-    // Cấu hình UART2 cho QR code (Serial2)
-    Serial2.begin(UART_BAUD_RATE);
 }
 
 // Task điều khiển motor
 void motor_control_task(void *pvParameters) {
     while (1) {
-        digitalWrite(EN_MT_PIN, HIGH);
-        ledcWrite(PWM_CHANNEL1, 512);  // 50% duty (1023 max for 10-bit)
-        ledcWrite(PWM_CHANNEL2, 0);
-        
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        readLimitSwitch();
+        // xử lý trường hợp enable motor
+        if(boxInfo.motorState == 1) {
+            motorControl.enable();
+            uint8_t speed = motorControl.detecTarget(boxInfo.motorSpeed, boxInfo.distanceBackward);
+            if (boxInfo.doorState == 0) {
+                motorControl.close(speed);
+            } else {
+                motorControl.open(speed);
+            }
+        } else {
+            motorControl.disable();
+        }
+        // xử lý trường hợp limit switch
+        if(boxInfo.limitSwitch1 == 1 || boxInfo.limitSwitch2 == 1) {
+            motorControl.stop();
+        } 
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
@@ -63,7 +68,7 @@ void sensor_task(void *pvParameters) {
         Serial.printf("Distance Forward: %d cm\n", boxInfo.distanceForward);
         Serial.printf("Distance Backward: %d cm\n", boxInfo.distanceBackward);
     
-        vTaskDelay(pdMS_TO_TICKS(500));
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
@@ -75,7 +80,8 @@ void qr_task(void *pvParameters) {
             int len = Serial2.readBytesUntil('\n', data, BUFFER_SIZE - 1);
             if (len > 0) {
                 data[len] = '\0';
-                Serial.printf("QR Code: %s\n", data);
+                // Serial.printf("QR Code: %s\n", data);
+                ESP_LOGI("QR", "QR Code: %s", data);
             }
         }
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -85,24 +91,41 @@ void qr_task(void *pvParameters) {
 void send_queue(void *pvParameters) {
     std::string messageToSend; 
     while (1) {
-        if (xQueueReceive(sendMsgQueue, &messageToSend, 0) == pdPASS) {
-            Serial.println(messageToSend.c_str());
-        }
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
 void serialEvent() {
-    static String incomingMsg;
-    while (Serial.available()) {
-        incomingMsg = Serial.readStringUntil('\n');
-        incomingMsg.trim();
-        if (incomingMsg.length() > 0) {
-            ESP_LOGI("Serial", "Received: %s", incomingMsg.c_str());
-            xQueueSend(receiveMsgQueue, &incomingMsg, 0);
-            incomingMsg = "";
+    char buffer[BUFFER_SIZE];
+    while (1) {
+        if (Serial.available()) {
+            int len = Serial.readBytesUntil('\n', buffer, BUFFER_SIZE - 1);
+            if (len > 0) {
+                buffer[len] = '\0';
+                // Bỏ ký tự '>' ở đầu nếu có
+                char* jsonStart = buffer;
+                if (buffer[0] == '>') {
+                    jsonStart = buffer + 1;
+                }
+                char* message = strdup(jsonStart);
+                if (xQueueSend(receiveMsgQueue, &message, pdMS_TO_TICKS(100)) != pdPASS) {
+                    Serial.println("Queue full, message dropped");
+                    free(message);
+                }
+            }
         }
-        vTaskDelay(pdMS_TO_TICKS(1));
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
+void handleMesTask(void *pvParameters) {
+    char* message;
+    while (1) {
+        if (xQueueReceive(receiveMsgQueue, &message, pdMS_TO_TICKS(100)) == pdPASS) {
+            handleSerial.handleMsg(message);
+            free(message);
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
@@ -149,4 +172,9 @@ void setup() {
 void loop() {
     // Để trống vì FreeRTOS quản lý các task
     vTaskDelay(pdMS_TO_TICKS(1000));  // Tránh watchdog timeout
+}
+
+void readLimitSwitch() {
+    boxInfo.limitSwitch1 = digitalRead(LS1_PIN);
+    boxInfo.limitSwitch2 = digitalRead(LS2_PIN);
 }

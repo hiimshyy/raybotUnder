@@ -2,15 +2,16 @@
 #define HANDLE_SERIAL_H
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
 
 class HandleSerial {
 public:
     HandleSerial();
-    void serialEvent();
-    void sendMsg(String messageToSend);
-    String receiveMsg();
+    void sendMsg(const uint8_t state_type, const JsonObject data);                                   
+    void senACK(const std::string id, const uint8_t status);
+    void handleMsg(const char* msg);
 private:
-    String _incomingMsg;
+
 };
 
 #endif

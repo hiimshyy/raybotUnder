@@ -6,36 +6,24 @@
 #define PWM_CHANNEL1   0
 #define PWM_CHANNEL2   1
 
-enum doorStateType
-{
-    OPEN,
-    CLOSE,
-    ERROR
-} doorState;
-
-enum motorStateType
-{
-    FORWARD,
-    BACKWARD,
-    STOP
-} motorState;
-
 class MotorControl {
 public:
     MotorControl(uint8_t pwm1Pin, uint8_t  pwm2Pin, uint8_t enPin, uint16_t pwmFreq, uint8_t pwmRes);
     void disable();
     void enable();
-private:
-    uint8_t  _pwm1Pin;
-    uint8_t  _pwm2Pin;
-    uint8_t  _enPin;
-    uint16_t  _pwmFreq;
-    uint8_t  _pwmRes;
-
-    void open(int speed);
-    void close(int speed);
+    void open(uint8_t speed);
+    void close(uint8_t speed);
     void stop();
-    float detecTarget(int distanceCM);
+    uint8_t detecTarget(uint8_t maxSpeed, uint8_t distanceCM);
+private:
+    uint8_t     _pwm1Pin;
+    uint8_t     _pwm2Pin;
+    uint8_t     _enPin;
+    uint16_t    _pwmFreq;
+    uint8_t     _pwmRes;
+    uint8_t     target;
+
+    
 };
 
 #endif
