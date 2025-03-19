@@ -16,6 +16,7 @@
 
 // Cấu hình UART
 #define UART_BAUD_RATE 115200
-#define BUFFER_SIZE    1024
+#define QR_BAUD_RATE   9600
+#define BUFFER_SIZE    128
 
 #endif

@@ -1,12 +1,11 @@
 #include "handle_serial.h"
-#include "info.h"
 
 HandleSerial::HandleSerial() {
     Serial.println("HandleSerial object created");
 }
 
 void HandleSerial::sendMsg(const uint8_t state_type, const JsonObject data) {
-    StaticJsonDocument<200> doc;
+    JsonDocument doc;
     doc["type"] = 0;
     doc["state_type"] = state_type;
     doc["data"] = data;
@@ -18,8 +17,8 @@ void HandleSerial::sendMsg(const uint8_t state_type, const JsonObject data) {
     Serial.println(formattedMsg.c_str());
 }
 
-void HandleSerial::senACK(const std::string id, const uint8_t status) {
-    StaticJsonDocument<200> doc;
+void HandleSerial::sendACK(const std::string id, const uint8_t status) {
+    JsonDocument doc;
     doc["type"] = 1;
     doc["id"] = id;
     doc["status"] = status;
@@ -31,12 +30,12 @@ void HandleSerial::senACK(const std::string id, const uint8_t status) {
     Serial.println(formattedMsg.c_str());
 }
 
-void HandleSerial::handleMsg(const char* msg) {
-    StaticJsonDocument<200> doc;
+HandleSerial::boxParams HandleSerial::handleMsg(const char* msg) {
+    boxParams params = {-1, -1, -1};
+    JsonDocument doc;
     DeserializationError error = deserializeJson(doc, msg);
     if (error) {
-        Serial.printf("JSON parse error: %s\n", error.c_str());
-        return;
+        ESP_LOGE("HandleSerial", "JSON parse error: %s", error.c_str());
     }
     const char* id = doc["id"];
     uint8_t type = doc["type"];
@@ -44,19 +43,17 @@ void HandleSerial::handleMsg(const char* msg) {
 
     if (!id || !data) {
         Serial.println("Missing 'id' or 'data' field");
-        return;
+        sendACK(id, 0);
     }
 
-    switch (type)
-    {
-    case 3: 
-        boxInfo.doorState = data["state"];
-        boxInfo.motorSpeed = data["speed"];
-        boxInfo.motorState = data["enable"];
-        break;
-    
-    default:
-        Serial.println("I need msg type 3!");
-        break;
+    if (type == 0) {
+        sendACK(id, 1);
+        params.state = data["state"];
+        params.speed = data["speed"];
+        params.enable = data["enable"];
+        return params;
+    } else {
+        sendACK(id, 0);
     }
+    return params;
 }

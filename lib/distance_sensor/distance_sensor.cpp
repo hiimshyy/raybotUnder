@@ -1,8 +1,4 @@
 #include "distance_sensor.h"
-#ifdef ARDUINO
-#include <Arduino.h>
-#include <wiring_private.h>
-#endif
 
 DistanceSensor::DistanceSensor(uint8_t SensorPin, long SensorModel) {
     _sensorPin = SensorPin;

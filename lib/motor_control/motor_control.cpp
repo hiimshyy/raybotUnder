@@ -1,16 +1,23 @@
 #include "motor_control.h"
 
-MotorControl::MotorControl(uint8_t  pwm1Pin, uint8_t pwm2Pin, uint8_t enPin, uint16_t  pwmFreq, uint8_t  pwmRes) {
+MotorControl::MotorControl(uint8_t pwm1Pin, uint8_t pwm2Pin, uint8_t enPin, uint16_t pwmFreq, uint8_t pwmRes) {
     _pwm1Pin = pwm1Pin;
     _pwm2Pin = pwm2Pin;
     _enPin = enPin;
     _pwmFreq = pwmFreq;
     _pwmRes = pwmRes;
-    ledcAttachPin(_pwm1Pin, PWM_CHANNEL1);
-    ledcAttachPin(_pwm2Pin, PWM_CHANNEL2);
+
     ledcSetup(PWM_CHANNEL1, _pwmFreq, _pwmRes);
     ledcSetup(PWM_CHANNEL2, _pwmFreq, _pwmRes);
+
+    ledcAttachPin(_pwm1Pin, PWM_CHANNEL1);
+    ledcAttachPin(_pwm2Pin, PWM_CHANNEL2);
+
+    ledcWrite(PWM_CHANNEL1, 0);
+    ledcWrite(PWM_CHANNEL2, 0);
+
     pinMode(_enPin, OUTPUT);
+    digitalWrite(_enPin, HIGH);
 }
 
 uint8_t MotorControl::detecTarget(uint8_t maxSpeed, uint8_t distance) {
@@ -21,13 +28,17 @@ uint8_t MotorControl::detecTarget(uint8_t maxSpeed, uint8_t distance) {
 }
 
 void MotorControl::open(uint8_t speed) {
-    ledcWrite(PWM_CHANNEL1, speed);
+    uint32_t _speed = map(speed, 0, 255, 0, 1023);
+    Serial.printf("Motor control - Open speed: %d\n", _speed);
+    ledcWrite(PWM_CHANNEL1, _speed);
     ledcWrite(PWM_CHANNEL2, 0);
 }
 
 void MotorControl::close(uint8_t speed) {
+    uint32_t _speed = map(speed, 0, 255, 0, 1023);
+    Serial.printf("Motor control - Close speed: %d\n", _speed);
     ledcWrite(PWM_CHANNEL1, 0);
-    ledcWrite(PWM_CHANNEL2, speed);
+    ledcWrite(PWM_CHANNEL2, _speed);
 }
 
 void MotorControl::stop() {

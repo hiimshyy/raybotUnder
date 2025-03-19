@@ -8,8 +8,8 @@
 #include "motor_control.h"
 #include "handle_serial.h"
 
-DistanceSensor BACKWARD_SENSOR(ADC1_PIN, 1080);
-DistanceSensor FORWARD_SENSOR(ADC2_PIN, 1080);
+// DistanceSensor BACKWARD_SENSOR(ADC1_PIN, 1080);
+DistanceSensor UNDER_SENSOR(ADC2_PIN, 1080);
 
 MotorControl motorControl(PWM1_PIN, PWM2_PIN,EN_MT_PIN, PWM_FREQ, PWM_RESOLUTION);
 
@@ -19,14 +19,17 @@ TaskHandle_t motorTaskHandle = NULL;
 TaskHandle_t sensorTaskHandle = NULL;
 TaskHandle_t qrTaskHandle = NULL;
 TaskHandle_t handleMesTaskHandle = NULL;
+TaskHandle_t serialEventTaskHandle = NULL;
 
 QueueHandle_t receiveMsgQueue = NULL;
 QueueHandle_t sendMsgQueue = NULL;
 
+void readLimitSwitch();
+
 void init_peripherals() {
     Serial.begin(UART_BAUD_RATE);
-    Serial2.begin(UART_BAUD_RATE);
-    if (!Serial) {
+    Serial2.begin(QR_BAUD_RATE, SERIAL_8N1, 16, 17);
+    if (!Serial || !Serial2) {
         Serial.println("Serial not started");
         while (1);
     }
@@ -38,21 +41,21 @@ void init_peripherals() {
 // Task điều khiển motor
 void motor_control_task(void *pvParameters) {
     while (1) {
-        readLimitSwitch();
+        // readLimitSwitch();
+        // Serial.println();
         // xử lý trường hợp enable motor
         if(boxInfo.motorState == 1) {
             motorControl.enable();
-            uint8_t speed = motorControl.detecTarget(boxInfo.motorSpeed, boxInfo.distanceBackward);
-            if (boxInfo.doorState == 0) {
-                motorControl.close(speed);
-            } else {
-                motorControl.open(speed);
+            if (boxInfo.doorState == 0 && boxInfo.isOpen == true) {
+                motorControl.close(boxInfo.motorSpeed);
+            } else if (boxInfo.doorState == 1 && boxInfo.isOpen == false) {
+                motorControl.open(boxInfo.motorSpeed);
             }
         } else {
             motorControl.disable();
         }
         // xử lý trường hợp limit switch
-        if(boxInfo.limitSwitch1 == 1 || boxInfo.limitSwitch2 == 1) {
+        if(boxInfo.limitSwitchOpen == 1 || boxInfo.limitSwitchClose == 1) {
             motorControl.stop();
         } 
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -61,68 +64,77 @@ void motor_control_task(void *pvParameters) {
 
 // Task đọc sensor
 void sensor_task(void *pvParameters) {
+    // static JsonDocument sensorData;
     while (1) {
-        boxInfo.distanceForward = FORWARD_SENSOR.getDistance();
-        boxInfo.distanceBackward = BACKWARD_SENSOR.getDistance();
+        // boxInfo.distanceForward = FORWARD_SENSOR.getDistance();
+        boxInfo.distanceBackward = UNDER_SENSOR.getDistance();
 
-        Serial.printf("Distance Forward: %d cm\n", boxInfo.distanceForward);
-        Serial.printf("Distance Backward: %d cm\n", boxInfo.distanceBackward);
+        // Send formatted message using HandleSerial
+        // sensorData.clear();
+        // sensorData["under"] = boxInfo.distanceUnder;
+        // sensorData["backward"] = boxInfo.distanceBackward;
+        
+        // handleSerial.sendMsg(SENSOR_STATE, sensorData.as<JsonObject>());
+
+        Serial.printf("Distance Under: %d cm\n", boxInfo.distanceUnder);
+        // Serial.printf("Distance Backward: %d cm\n", boxInfo.distanceBackward);
     
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
 // Task đọc QR code
-void qr_task(void *pvParameters) {
+void serialEvent2() {
     char data[BUFFER_SIZE];
-    while (1) {
-        if (Serial2.available()) {
-            int len = Serial2.readBytesUntil('\n', data, BUFFER_SIZE - 1);
-            if (len > 0) {
-                data[len] = '\0';
-                // Serial.printf("QR Code: %s\n", data);
-                ESP_LOGI("QR", "QR Code: %s", data);
-            }
+    while (Serial2.available()) {
+        int len = Serial2.readBytesUntil('\n', data, BUFFER_SIZE - 1);
+        if (len > 0) {
+            data[len] = '\0';
+            // Serial.printf("QR task - QR Code: %s\n", data);
+            String dataStr = String(data);
+            dataStr.trim();
+            JsonDocument qrData;
+            qrData["code"] = dataStr;
+            
+            // Send formatted message using HandleSerial
+            handleSerial.sendMsg(QR_STATE, qrData.as<JsonObject>());
         }
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
-}
-
-void send_queue(void *pvParameters) {
-    std::string messageToSend; 
-    while (1) {
-        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
 void serialEvent() {
     char buffer[BUFFER_SIZE];
-    while (1) {
-        if (Serial.available()) {
-            int len = Serial.readBytesUntil('\n', buffer, BUFFER_SIZE - 1);
-            if (len > 0) {
-                buffer[len] = '\0';
-                // Bỏ ký tự '>' ở đầu nếu có
-                char* jsonStart = buffer;
-                if (buffer[0] == '>') {
-                    jsonStart = buffer + 1;
-                }
-                char* message = strdup(jsonStart);
-                if (xQueueSend(receiveMsgQueue, &message, pdMS_TO_TICKS(100)) != pdPASS) {
-                    Serial.println("Queue full, message dropped");
-                    free(message);
-                }
+    while (Serial.available()) {
+        int len = Serial.readBytesUntil('\n', buffer, BUFFER_SIZE - 1);
+        if (len > 0) {
+            buffer[len] = '\0';
+            char* jsonStart = buffer;
+            if (buffer[0] == '>') {
+                jsonStart = buffer + 1;
+            }
+            char* message = strdup(jsonStart);
+            Serial.printf("Serial Event - Received message: %s\n", message);
+            if (xQueueSend(receiveMsgQueue, &message, pdMS_TO_TICKS(100)) != pdPASS) {
+                Serial.println("Queue full, message dropped");
+                free(message);
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
 void handleMesTask(void *pvParameters) {
     char* message;
     while (1) {
+        // Serial.println("HandleMes - In handle message task");
         if (xQueueReceive(receiveMsgQueue, &message, pdMS_TO_TICKS(100)) == pdPASS) {
-            handleSerial.handleMsg(message);
+            HandleSerial::boxParams params = handleSerial.handleMsg(message);
+            if (params.state != -1 || params.speed != -1 || params.enable != -1) {
+                boxInfo.doorState = params.state;
+                boxInfo.motorSpeed = params.speed;
+                boxInfo.motorState = params.enable;
+                Serial.printf("HandleMes - Door State: %d, Motor Speed: %d, Motor State: %d\n", 
+                              boxInfo.doorState, boxInfo.motorSpeed, boxInfo.motorState);
+            }
             free(message);
         }
         vTaskDelay(pdMS_TO_TICKS(10));
@@ -131,7 +143,6 @@ void handleMesTask(void *pvParameters) {
 
 void setup() {
     init_peripherals();
-
     // Tạo queue
     receiveMsgQueue = xQueueCreate(100, sizeof(String));
     sendMsgQueue = xQueueCreate(100, sizeof(String));
@@ -146,24 +157,24 @@ void setup() {
         0                   // Gắn vào lõi 0
     );
 
-    xTaskCreatePinnedToCore(
-        sensor_task,
-        "sensor_task",
-        512,
-        NULL,
-        1,
-        &sensorTaskHandle,
-        1                   // Gắn vào lõi 1
-    );
+    // xTaskCreatePinnedToCore(
+    //     sensor_task,
+    //     "sensor_task",
+    //     1024,
+    //     NULL,
+    //     1,
+    //     &sensorTaskHandle,
+    //     1                   // Gắn vào lõi 1
+    // );
 
     xTaskCreatePinnedToCore(
-        qr_task,
-        "qr_task",
+        handleMesTask,
+        "handle_message_task",
         2048,
         NULL,
         1,
-        &qrTaskHandle,
-        1                   // Gắn vào lõi 1
+        &handleMesTaskHandle,
+        1
     );
 
     Serial.println("Application started");
@@ -171,10 +182,17 @@ void setup() {
 
 void loop() {
     // Để trống vì FreeRTOS quản lý các task
-    vTaskDelay(pdMS_TO_TICKS(1000));  // Tránh watchdog timeout
+    // vTaskDelay(pdMS_TO_TICKS(1000));  // Tránh watchdog timeout
 }
 
 void readLimitSwitch() {
-    boxInfo.limitSwitch1 = digitalRead(LS1_PIN);
-    boxInfo.limitSwitch2 = digitalRead(LS2_PIN);
+    boxInfo.limitSwitchOpen = digitalRead(LS1_PIN);
+    boxInfo.limitSwitchClose = digitalRead(LS2_PIN);
+
+    // Send formatted message using HandleSerial
+    if (boxInfo.limitSwitchOpen == 1) {
+        boxInfo.isOpen = true;
+    } else if (boxInfo.limitSwitchClose == 1) {
+        boxInfo.isOpen = false;
+    } 
 }

@@ -6,11 +6,18 @@
 
 class HandleSerial {
 public:
+    struct boxParams
+    {
+        int state;
+        int speed;
+        int enable;
+    };
+
     HandleSerial();
     void sendMsg(const uint8_t state_type, const JsonObject data);                                   
-    void senACK(const std::string id, const uint8_t status);
-    void handleMsg(const char* msg);
+    boxParams handleMsg(const char* msg);
 private:
+    void sendACK(const std::string id, const uint8_t status);
 
 };
 
