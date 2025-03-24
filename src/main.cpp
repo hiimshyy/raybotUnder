@@ -17,9 +17,7 @@ HandleSerial handleSerial;
 
 TaskHandle_t motorTaskHandle = NULL;
 TaskHandle_t sensorTaskHandle = NULL;
-TaskHandle_t qrTaskHandle = NULL;
 TaskHandle_t handleMesTaskHandle = NULL;
-TaskHandle_t serialEventTaskHandle = NULL;
 
 QueueHandle_t receiveMsgQueue = NULL;
 QueueHandle_t sendMsgQueue = NULL;
@@ -38,48 +36,88 @@ void init_peripherals() {
     pinMode(LS2_PIN, INPUT_PULLUP);
 }
 
-// Task điều khiển motor
 void motor_control_task(void *pvParameters) {
+    static bool lastRunning = false;
+    static uint8_t lastSpeed = 0;
+    static bool lastEnable = false;
+    static bool lastDoorState = false;
+    JsonDocument doc;
+
     while (1) {
-        // readLimitSwitch();
-        // Serial.println();
-        // xử lý trường hợp enable motor
+        readLimitSwitch();
+        bool isRunning = false;
+        uint8_t currentSpeed = 0;
+        bool stateChanged = false;
+
+        // Kiểm tra trạng thái motor
         if(boxInfo.motorState == 1) {
-            motorControl.enable();
+            if (lastEnable != boxInfo.motorState) {
+                motorControl.enable();
+                lastEnable = boxInfo.motorState;
+                stateChanged = true;
+            }
+
             if (boxInfo.doorState == 0 && boxInfo.isOpen == true) {
-                motorControl.close(boxInfo.motorSpeed);
+                currentSpeed = 70;
+                isRunning = true;
+                motorControl.close(currentSpeed);
             } else if (boxInfo.doorState == 1 && boxInfo.isOpen == false) {
-                motorControl.open(boxInfo.motorSpeed);
+                currentSpeed = 80;
+                isRunning = true;
+                motorControl.open(currentSpeed);
+            } else {
+                motorControl.stop();
             }
         } else {
-            motorControl.disable();
+            if (lastEnable != boxInfo.motorState) {
+                motorControl.disable();
+                lastEnable = boxInfo.motorState;
+                stateChanged = true;
+            }
         }
-        // xử lý trường hợp limit switch
-        if(boxInfo.limitSwitchOpen == 1 || boxInfo.limitSwitchClose == 1) {
-            motorControl.stop();
-        } 
+
+        // Chỉ gửi message khi có thay đổi
+        if (lastRunning != isRunning || 
+            lastSpeed != currentSpeed || 
+            lastDoorState != boxInfo.doorState || 
+            stateChanged) {
+            
+            doc.clear();
+            doc["state"] = boxInfo.doorState;
+            doc["enable"] = boxInfo.motorState;
+            doc["speed"] = currentSpeed;
+            doc["is_running"] = isRunning;
+            handleSerial.sendMsg(DOOR_STATE, doc.as<JsonObject>());
+
+            // Cập nhật trạng thái
+            lastRunning = isRunning;
+            lastSpeed = currentSpeed;
+            lastDoorState = boxInfo.doorState;
+        }
+
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
 // Task đọc sensor
 void sensor_task(void *pvParameters) {
-    // static JsonDocument sensorData;
+    static JsonDocument sensorData;
+    static uint8_t lastDistance = 0;
     while (1) {
-        // boxInfo.distanceForward = FORWARD_SENSOR.getDistance();
-        boxInfo.distanceBackward = UNDER_SENSOR.getDistance();
+        uint8_t currentDistance = UNDER_SENSOR.getDistance();
+        boxInfo.distanceBackward = currentDistance;
+        // Serial.printf("Distance: %d\n", currentDistance);
 
-        // Send formatted message using HandleSerial
-        // sensorData.clear();
-        // sensorData["under"] = boxInfo.distanceUnder;
-        // sensorData["backward"] = boxInfo.distanceBackward;
-        
-        // handleSerial.sendMsg(SENSOR_STATE, sensorData.as<JsonObject>());
-
-        Serial.printf("Distance Under: %d cm\n", boxInfo.distanceUnder);
-        // Serial.printf("Distance Backward: %d cm\n", boxInfo.distanceBackward);
+        // Only send if distance changed
+        if (lastDistance != currentDistance) {
+            sensorData.clear();
+            sensorData["under"] = currentDistance;
+            
+            handleSerial.sendMsg(SENSOR_STATE, sensorData.as<JsonObject>());
+            lastDistance = currentDistance;   
+        }
     
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(500)); 
     }
 }
 
@@ -90,7 +128,6 @@ void serialEvent2() {
         int len = Serial2.readBytesUntil('\n', data, BUFFER_SIZE - 1);
         if (len > 0) {
             data[len] = '\0';
-            // Serial.printf("QR task - QR Code: %s\n", data);
             String dataStr = String(data);
             dataStr.trim();
             JsonDocument qrData;
@@ -132,8 +169,8 @@ void handleMesTask(void *pvParameters) {
                 boxInfo.doorState = params.state;
                 boxInfo.motorSpeed = params.speed;
                 boxInfo.motorState = params.enable;
-                Serial.printf("HandleMes - Door State: %d, Motor Speed: %d, Motor State: %d\n", 
-                              boxInfo.doorState, boxInfo.motorSpeed, boxInfo.motorState);
+                // Serial.printf("HandleMes - Door State: %d, Motor Speed: %d, Motor State: %d\n", 
+                //               boxInfo.doorState, boxInfo.motorSpeed, boxInfo.motorState);
             }
             free(message);
         }
@@ -157,15 +194,15 @@ void setup() {
         0                   // Gắn vào lõi 0
     );
 
-    // xTaskCreatePinnedToCore(
-    //     sensor_task,
-    //     "sensor_task",
-    //     1024,
-    //     NULL,
-    //     1,
-    //     &sensorTaskHandle,
-    //     1                   // Gắn vào lõi 1
-    // );
+    xTaskCreatePinnedToCore(
+        sensor_task,
+        "sensor_task",
+        2048,
+        NULL,
+        1,
+        &sensorTaskHandle,
+        1                   // Gắn vào lõi 1
+    );
 
     xTaskCreatePinnedToCore(
         handleMesTask,
@@ -188,11 +225,23 @@ void loop() {
 void readLimitSwitch() {
     boxInfo.limitSwitchOpen = digitalRead(LS1_PIN);
     boxInfo.limitSwitchClose = digitalRead(LS2_PIN);
+    static bool currentState;
+    // Serial.printf("Limit Switch Open: %d, Limit Switch Close: %d\n", boxInfo.limitSwitchOpen, boxInfo.limitSwitchClose);
 
     // Send formatted message using HandleSerial
-    if (boxInfo.limitSwitchOpen == 1) {
-        boxInfo.isOpen = true;
-    } else if (boxInfo.limitSwitchClose == 1) {
-        boxInfo.isOpen = false;
+    if (boxInfo.limitSwitchOpen == 0 && boxInfo.limitSwitchClose == 0) {
+        currentState = true;
+        // Serial.println(currentState);
+        // Serial.println("Door is open");
+    } else if (boxInfo.limitSwitchClose == 1 && boxInfo.limitSwitchOpen == 1) {
+        currentState = false;
+        // Serial.println(currentState);
+        // Serial.println("Door is close");
     } 
+    if(currentState != boxInfo.isOpen) {
+        boxInfo.isOpen = currentState;
+        JsonDocument doorState;
+        doorState["state"] = boxInfo.isOpen;
+        handleSerial.sendMsg(DOOR_STATE, doorState.as<JsonObject>());
+    }
 }

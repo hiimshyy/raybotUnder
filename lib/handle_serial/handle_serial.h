@@ -6,8 +6,7 @@
 
 class HandleSerial {
 public:
-    struct boxParams
-    {
+    struct boxParams {
         int state;
         int speed;
         int enable;

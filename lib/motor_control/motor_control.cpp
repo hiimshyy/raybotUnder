@@ -28,25 +28,29 @@ uint8_t MotorControl::detecTarget(uint8_t maxSpeed, uint8_t distance) {
 }
 
 void MotorControl::open(uint8_t speed) {
-    uint32_t _speed = map(speed, 0, 255, 0, 1023);
-    Serial.printf("Motor control - Open speed: %d\n", _speed);
-    ledcWrite(PWM_CHANNEL1, _speed);
-    ledcWrite(PWM_CHANNEL2, 0);
-}
-
-void MotorControl::close(uint8_t speed) {
-    uint32_t _speed = map(speed, 0, 255, 0, 1023);
-    Serial.printf("Motor control - Close speed: %d\n", _speed);
+    //over 90% speed to open the door
+    uint32_t _speed = map(speed, 0, 100, 0, 1023);
+    // Serial.printf("Motor control - Open speed: %d\n", _speed);
     ledcWrite(PWM_CHANNEL1, 0);
     ledcWrite(PWM_CHANNEL2, _speed);
 }
 
+void MotorControl::close(uint8_t speed) {
+    //over 70% speed to close the door
+    uint32_t _speed = map(speed, 0, 100, 0, 1023);
+    // Serial.printf("Motor control - Close speed: %d\n", _speed);
+    ledcWrite(PWM_CHANNEL1, _speed);
+    ledcWrite(PWM_CHANNEL2, 0);
+}
+
 void MotorControl::stop() {
+    // Serial.println("Motor control - Stop");
     ledcWrite(PWM_CHANNEL1, 0);
     ledcWrite(PWM_CHANNEL2, 0);
 }
 
 void MotorControl::disable() {
+    stop();
     digitalWrite(_enPin, LOW);
 }
 
