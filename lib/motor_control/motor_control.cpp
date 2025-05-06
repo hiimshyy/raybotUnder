@@ -17,7 +17,7 @@ MotorControl::MotorControl(uint8_t pwm1Pin, uint8_t pwm2Pin, uint8_t enPin, uint
     ledcWrite(PWM_CHANNEL2, 0);
 
     pinMode(_enPin, OUTPUT);
-    digitalWrite(_enPin, HIGH);
+    digitalWrite(_enPin, LOW);
 }
 
 uint8_t MotorControl::detecTarget(uint8_t maxSpeed, uint8_t distance) {

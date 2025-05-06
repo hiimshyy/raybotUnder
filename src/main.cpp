@@ -9,7 +9,7 @@
 #include "handle_serial.h"
 
 // DistanceSensor BACKWARD_SENSOR(ADC1_PIN, 1080);
-DistanceSensor UNDER_SENSOR(ADC2_PIN, 1080);
+DistanceSensor UNDER_SENSOR(ADC1_PIN, 1080);
 
 MotorControl motorControl(PWM1_PIN, PWM2_PIN,EN_MT_PIN, PWM_FREQ, PWM_RESOLUTION);
 
@@ -62,7 +62,7 @@ void motor_control_task(void *pvParameters) {
                 isRunning = true;
                 motorControl.close(currentSpeed);
             } else if (boxInfo.doorState == 1 && boxInfo.isOpen == false) {
-                currentSpeed = 80;
+                currentSpeed = 100;
                 isRunning = true;
                 motorControl.open(currentSpeed);
             } else {
@@ -87,7 +87,7 @@ void motor_control_task(void *pvParameters) {
             doc["enable"] = boxInfo.motorState;
             doc["speed"] = currentSpeed;
             doc["is_running"] = isRunning;
-            handleSerial.sendMsg(DOOR_STATE, doc.as<JsonObject>());
+            handleSerial.sendMsg(MOTOR_STATE, doc.as<JsonObject>());
 
             // Cập nhật trạng thái
             lastRunning = isRunning;
@@ -141,6 +141,7 @@ void serialEvent2() {
 
 void serialEvent() {
     char buffer[BUFFER_SIZE];
+    char* message;
     while (Serial.available()) {
         int len = Serial.readBytesUntil('\n', buffer, BUFFER_SIZE - 1);
         if (len > 0) {
@@ -148,9 +149,9 @@ void serialEvent() {
             char* jsonStart = buffer;
             if (buffer[0] == '>') {
                 jsonStart = buffer + 1;
+                message = strdup(jsonStart);
             }
-            char* message = strdup(jsonStart);
-            Serial.printf("Serial Event - Received message: %s\n", message);
+            // Serial.printf("Serial Event - Received message: %s\n", message);
             if (xQueueSend(receiveMsgQueue, &message, pdMS_TO_TICKS(100)) != pdPASS) {
                 Serial.println("Queue full, message dropped");
                 free(message);
@@ -194,15 +195,15 @@ void setup() {
         0                   // Gắn vào lõi 0
     );
 
-    xTaskCreatePinnedToCore(
-        sensor_task,
-        "sensor_task",
-        2048,
-        NULL,
-        1,
-        &sensorTaskHandle,
-        1                   // Gắn vào lõi 1
-    );
+    // xTaskCreatePinnedToCore(
+    //     sensor_task,
+    //     "sensor_task",
+    //     2048,
+    //     NULL,
+    //     1,
+    //     &sensorTaskHandle,
+    //     1                   // Gắn vào lõi 1
+    // );
 
     xTaskCreatePinnedToCore(
         handleMesTask,
@@ -229,11 +230,11 @@ void readLimitSwitch() {
     // Serial.printf("Limit Switch Open: %d, Limit Switch Close: %d\n", boxInfo.limitSwitchOpen, boxInfo.limitSwitchClose);
 
     // Send formatted message using HandleSerial
-    if (boxInfo.limitSwitchOpen == 0 && boxInfo.limitSwitchClose == 0) {
+    if (boxInfo.limitSwitchOpen == 1 && boxInfo.limitSwitchClose == 0) {
         currentState = true;
         // Serial.println(currentState);
         // Serial.println("Door is open");
-    } else if (boxInfo.limitSwitchClose == 1 && boxInfo.limitSwitchOpen == 1) {
+    } else if (boxInfo.limitSwitchOpen == 0 && boxInfo.limitSwitchClose == 1) {
         currentState = false;
         // Serial.println(currentState);
         // Serial.println("Door is close");
@@ -241,7 +242,7 @@ void readLimitSwitch() {
     if(currentState != boxInfo.isOpen) {
         boxInfo.isOpen = currentState;
         JsonDocument doorState;
-        doorState["state"] = boxInfo.isOpen;
+        doorState["is_open"] = boxInfo.isOpen;
         handleSerial.sendMsg(DOOR_STATE, doorState.as<JsonObject>());
     }
 }
