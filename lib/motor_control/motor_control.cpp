@@ -31,16 +31,16 @@ void MotorControl::open(uint8_t speed) {
     //over 90% speed to open the door
     uint32_t _speed = map(speed, 0, 100, 0, 1023);
     // Serial.printf("Motor control - Open speed: %d\n", _speed);
-    ledcWrite(PWM_CHANNEL1, 0);
-    ledcWrite(PWM_CHANNEL2, _speed);
+    ledcWrite(PWM_CHANNEL1, 1023);
+    ledcWrite(PWM_CHANNEL2, 1023 - _speed);
 }
 
 void MotorControl::close(uint8_t speed) {
     //over 70% speed to close the door
     uint32_t _speed = map(speed, 0, 100, 0, 1023);
     // Serial.printf("Motor control - Close speed: %d\n", _speed);
-    ledcWrite(PWM_CHANNEL1, _speed);
-    ledcWrite(PWM_CHANNEL2, 0);
+    ledcWrite(PWM_CHANNEL1, 1023 - _speed);
+    ledcWrite(PWM_CHANNEL2, 1023);
 }
 
 void MotorControl::stop() {

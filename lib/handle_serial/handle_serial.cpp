@@ -27,7 +27,7 @@ void HandleSerial::sendACK(const std::string id, const uint8_t status) {
     serializeJson(doc, jsonString);
     
     std::string formattedMsg = ">" + std::string(jsonString.c_str()) + "\r\n";
-    Serial.println(formattedMsg.c_str());
+    Serial.print(formattedMsg.c_str());
 }
 
 HandleSerial::boxParams HandleSerial::handleMsg(const char* msg) {
@@ -35,25 +35,28 @@ HandleSerial::boxParams HandleSerial::handleMsg(const char* msg) {
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, msg);
     if (error) {
-        ESP_LOGE("HandleSerial", "JSON parse error: %s", error.c_str());
-    }
-    const char* id = doc["id"];
-    uint8_t type = doc["type"];
-    JsonObject data = doc["data"];
+        // ESP_LOGE("HandleSerial", "JSON parse error: %s", error.c_str());
+    } 
+    else {
+        const char* id = doc["id"];
+        uint8_t type = doc["type"];
+        JsonObject data = doc["data"];
 
-    if (!id || !data) {
-        Serial.println("Missing 'id' or 'data' field");
-        sendACK(id, 0);
-    }
+        if (!id || !data) {
+            // Serial.println("Missing 'id' or 'data' field");
+            sendACK(id, 0);
+        }
 
-    if (type == 0) {
-        sendACK(id, 1);
-        params.state = data["state"];
-        params.speed = data["speed"];
-        params.enable = data["enable"];
-        return params;
-    } else {
-        sendACK(id, 0);
+        if (type == 0) {
+            sendACK(id, 1);
+            params.state = data["state"];
+            params.speed = data["speed"];
+            params.enable = data["enable"];
+            return params;
+        } else {
+            sendACK(id, 0);
+        }
     }
+    
     return params;
 }

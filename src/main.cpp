@@ -25,6 +25,7 @@ QueueHandle_t sendMsgQueue = NULL;
 void readLimitSwitch();
 
 void init_peripherals() {
+    analogReadResolution(10);
     Serial.begin(UART_BAUD_RATE);
     Serial2.begin(QR_BAUD_RATE, SERIAL_8N1, 16, 17);
     if (!Serial || !Serial2) {
@@ -58,11 +59,11 @@ void motor_control_task(void *pvParameters) {
             }
 
             if (boxInfo.doorState == 0 && boxInfo.isOpen == true) {
-                currentSpeed = 70;
+                currentSpeed = boxInfo.motorSpeed;
                 isRunning = true;
                 motorControl.close(currentSpeed);
             } else if (boxInfo.doorState == 1 && boxInfo.isOpen == false) {
-                currentSpeed = 100;
+                currentSpeed = boxInfo.motorSpeed;
                 isRunning = true;
                 motorControl.open(currentSpeed);
             } else {
@@ -101,23 +102,24 @@ void motor_control_task(void *pvParameters) {
 
 // Task đọc sensor
 void sensor_task(void *pvParameters) {
-    static JsonDocument sensorData;
+    JsonDocument sensorData;
     static uint8_t lastDistance = 0;
+    static uint8_t currentDistance;
     while (1) {
-        uint8_t currentDistance = UNDER_SENSOR.getDistance();
+        currentDistance = UNDER_SENSOR.getDistance();
         boxInfo.distanceBackward = currentDistance;
         // Serial.printf("Distance: %d\n", currentDistance);
 
         // Only send if distance changed
         if (lastDistance != currentDistance) {
-            sensorData.clear();
+            // sensorData.clear();
             sensorData["under"] = currentDistance;
             
             handleSerial.sendMsg(SENSOR_STATE, sensorData.as<JsonObject>());
             lastDistance = currentDistance;   
         }
     
-        vTaskDelay(pdMS_TO_TICKS(500)); 
+        vTaskDelay(pdMS_TO_TICKS(100)); 
     }
 }
 
@@ -195,15 +197,15 @@ void setup() {
         0                   // Gắn vào lõi 0
     );
 
-    // xTaskCreatePinnedToCore(
-    //     sensor_task,
-    //     "sensor_task",
-    //     2048,
-    //     NULL,
-    //     1,
-    //     &sensorTaskHandle,
-    //     1                   // Gắn vào lõi 1
-    // );
+    xTaskCreatePinnedToCore(
+        sensor_task,
+        "sensor_task",
+        2048,
+        NULL,
+        1,
+        &sensorTaskHandle,
+        1                   // Gắn vào lõi 1
+    );
 
     xTaskCreatePinnedToCore(
         handleMesTask,
