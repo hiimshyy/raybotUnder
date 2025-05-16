@@ -8,8 +8,8 @@
 #include "motor_control.h"
 #include "handle_serial.h"
 
-// DistanceSensor BACKWARD_SENSOR(ADC1_PIN, 1080);
 DistanceSensor UNDER_SENSOR(ADC1_PIN, 1080);
+DistanceSensor DETECT_OBJ_SENSOR(ADC2_PIN, 1080);
 
 MotorControl motorControl(PWM1_PIN, PWM2_PIN,EN_MT_PIN, PWM_FREQ, PWM_RESOLUTION);
 
@@ -103,20 +103,25 @@ void motor_control_task(void *pvParameters) {
 // Task đọc sensor
 void sensor_task(void *pvParameters) {
     JsonDocument sensorData;
-    static uint8_t lastDistance = 0;
-    static uint8_t currentDistance;
+    static uint8_t lastUnder, lastObject = 0;
+    static uint8_t currentUnder, currentObject;
     while (1) {
-        currentDistance = UNDER_SENSOR.getDistance();
-        boxInfo.distanceBackward = currentDistance;
-        // Serial.printf("Distance: %d\n", currentDistance);
+        currentUnder = UNDER_SENSOR.getDistance();
+        currentObject = DETECT_OBJ_SENSOR.getDistance();
+        boxInfo.distanceUnder = currentUnder;
+        boxInfo.distanceObject = currentObject;
+        // Serial.printf("Distance: %d\n", currentUnder);
+        // Serial.printf("Distance: %d\n", currentObject);
 
         // Only send if distance changed
-        if (lastDistance != currentDistance) {
+        if (lastUnder != currentUnder || lastObject != currentObject) {
             // sensorData.clear();
-            sensorData["under"] = currentDistance;
+            sensorData["under"] = currentUnder;
+            sensorData["object"] = currentObject;
             
             handleSerial.sendMsg(SENSOR_STATE, sensorData.as<JsonObject>());
-            lastDistance = currentDistance;   
+            lastUnder = currentUnder; 
+            lastObject = currentObject;  
         }
     
         vTaskDelay(pdMS_TO_TICKS(100)); 
@@ -183,6 +188,8 @@ void handleMesTask(void *pvParameters) {
 
 void setup() {
     init_peripherals();
+
+    readLimitSwitch();
     // Tạo queue
     receiveMsgQueue = xQueueCreate(100, sizeof(String));
     sendMsgQueue = xQueueCreate(100, sizeof(String));
@@ -226,25 +233,37 @@ void loop() {
 }
 
 void readLimitSwitch() {
+    static uint8_t lastState = IDLE;
+    static uint32_t lastDebounceTime = 0;
+    const uint32_t DEBOUNCE_DELAY = 50; // 50ms debounce
+
+    // Đọc trạng thái công tắc hành trình
     boxInfo.limitSwitchOpen = digitalRead(LS1_PIN);
     boxInfo.limitSwitchClose = digitalRead(LS2_PIN);
-    static bool currentState;
-    // Serial.printf("Limit Switch Open: %d, Limit Switch Close: %d\n", boxInfo.limitSwitchOpen, boxInfo.limitSwitchClose);
+    uint8_t currentState;
 
-    // Send formatted message using HandleSerial
+    // Xác định trạng thái cửa
     if (boxInfo.limitSwitchOpen == 1 && boxInfo.limitSwitchClose == 0) {
-        currentState = true;
-        // Serial.println(currentState);
-        // Serial.println("Door is open");
+        currentState = OPEN;
     } else if (boxInfo.limitSwitchOpen == 0 && boxInfo.limitSwitchClose == 1) {
-        currentState = false;
-        // Serial.println(currentState);
-        // Serial.println("Door is close");
-    } 
-    if(currentState != boxInfo.isOpen) {
-        boxInfo.isOpen = currentState;
-        JsonDocument doorState;
-        doorState["is_open"] = boxInfo.isOpen;
-        handleSerial.sendMsg(DOOR_STATE, doorState.as<JsonObject>());
+        currentState = CLOSE;
+    } else {
+        currentState = IDLE;
+    }
+
+    // Chỉ cập nhật khi đã qua thời gian debounce và trạng thái thay đổi
+    if ((millis() - lastDebounceTime) > DEBOUNCE_DELAY) {
+        if (currentState != lastState) {
+            lastDebounceTime = millis();
+            boxInfo.isOpen = currentState;
+            
+            // Gửi thông tin khi có thay đổi
+            JsonDocument doorState;
+            doorState.clear();  // Clear document trước khi sử dụng
+            doorState["is_open"] = currentState;
+            handleSerial.sendMsg(DOOR_STATE, doorState.as<JsonObject>());
+            
+            lastState = currentState;
+        }
     }
 }

@@ -36,9 +36,10 @@ int DistanceSensor::getDistance() {
 
 	if (_model == 1080) {
 		if (median > 1000) distanceCM = 0;
-		else if (median < 1000 && median > 150)
-			distanceCM = 29.988 * pow(map(median, 0, 1023, 0, 5000)/1000.0, -1.173);
-		else 
+		else if (median < 1000 && median > 59){
+			distanceCM = 29.988 * pow(map(median, 0, 1023, 0, 3300)/1000.0, -1.173);
+			if (distanceCM < 18) distanceCM = 18;
+		} else 
 			distanceCM = 80;
     }
 	else if (_model == 20150) {
