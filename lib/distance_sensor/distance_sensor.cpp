@@ -35,8 +35,8 @@ int DistanceSensor::getDistance() {
 	median = ir_val[SAMPLES/2];
 
 	if (_model == 1080) {
-		if (median > 1000) distanceCM = 0;
-		else if (median < 1000 && median > 59){
+		if (median > 867) distanceCM = 0;
+		else if (median < 867 && median > 100){
 			distanceCM = 29.988 * pow(map(median, 0, 1023, 0, 3300)/1000.0, -1.173);
 			if (distanceCM < 18) distanceCM = 18;
 		} else 

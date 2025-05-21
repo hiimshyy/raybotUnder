@@ -29,24 +29,45 @@ uint8_t MotorControl::detecTarget(uint8_t maxSpeed, uint8_t distance) {
 
 void MotorControl::open(uint8_t speed) {
     //over 90% speed to open the door
-    uint32_t _speed = map(speed, 0, 100, 0, 1023);
+    uint32_t _speed = map(speed, 0, 100, 1023, 0);
     // Serial.printf("Motor control - Open speed: %d\n", _speed);
     ledcWrite(PWM_CHANNEL1, 1023);
-    ledcWrite(PWM_CHANNEL2, 1023 - _speed);
+    // ledcWrite(PWM_CHANNEL2, 1023 - _speed);
+    rampSpeed(1023, _speed, 10, PWM_CHANNEL2);
+
 }
 
 void MotorControl::close(uint8_t speed) {
     //over 70% speed to close the door
-    uint32_t _speed = map(speed, 0, 100, 0, 1023);
+    uint32_t _speed = map(speed, 0, 100, 1023, 0);
     // Serial.printf("Motor control - Close speed: %d\n", _speed);
-    ledcWrite(PWM_CHANNEL1, 1023 - _speed);
+    rampSpeed(1023, _speed, 10, PWM_CHANNEL1);
+    // ledcWrite(PWM_CHANNEL1, 1023 - _speed);
     ledcWrite(PWM_CHANNEL2, 1023);
+
 }
 
 void MotorControl::stop() {
     // Serial.println("Motor control - Stop");
+    ledcWrite(PWM_CHANNEL1, 1023);
+    ledcWrite(PWM_CHANNEL2, 1023);
+}
+
+void MotorControl::hold() {
+    // Serial.println("Motor control - Hold");
     ledcWrite(PWM_CHANNEL1, 0);
     ledcWrite(PWM_CHANNEL2, 0);
+}
+
+void MotorControl::rampSpeed(uint32_t startSpeed, uint32_t targetSpeed, uint32_t steps, uint8_t channel) {
+    // Serial.printf("Motor control - Ramp speed: %d\n", speed);
+    int32_t speedDiff = targetSpeed - startSpeed;
+    uint32_t delayMs = 50; // 50ms between steps
+    for (uint8_t i = 0; i <= steps; i++) {
+        uint32_t currentSpeed = startSpeed + (speedDiff * i / steps);
+        ledcWrite(channel, currentSpeed);
+        vTaskDelay(pdMS_TO_TICKS(delayMs));
+    }
 }
 
 void MotorControl::disable() {
