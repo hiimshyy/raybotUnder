@@ -28,10 +28,10 @@ void init_peripherals() {
     analogReadResolution(10);
     Serial.begin(UART_BAUD_RATE);
     Serial2.begin(QR_BAUD_RATE, SERIAL_8N1, 16, 17);
-    if (!Serial || !Serial2) {
-        Serial.println("Serial not started");
-        while (1);
-    }
+    // if (!Serial || !Serial2) {
+    //     Serial.println("Serial not started");
+    //     // while (1);
+    // }
 
     pinMode(LS1_PIN, INPUT_PULLUP);
     pinMode(LS2_PIN, INPUT_PULLUP);
@@ -59,16 +59,19 @@ void motor_control_task(void *pvParameters) {
             }
 
             if (boxInfo.doorState == 0 && boxInfo.isOpen == true) {
-                currentSpeed = boxInfo.motorSpeed;
+                // currentSpeed = boxInfo.motorSpeed;
+                currentSpeed = 50;
                 isRunning = true;
                 motorControl.close(currentSpeed);
             } else if (boxInfo.doorState == 1 && boxInfo.isOpen == false) {
-                currentSpeed = boxInfo.motorSpeed;
+                // currentSpeed = boxInfo.motorSpeed;
+                currentSpeed = 80;
                 isRunning = true;
                 motorControl.open(currentSpeed);
-            } else {
-                motorControl.stop();
-            }
+            } 
+            // else {
+            //     motorControl.stop();
+            // }
         } else {
             if (lastEnable != boxInfo.motorState) {
                 motorControl.disable();
@@ -115,9 +118,9 @@ void sensor_task(void *pvParameters) {
 
         // Only send if distance changed
         if (lastUnder != currentUnder || lastObject != currentObject) {
-            // sensorData.clear();
+            sensorData.clear();
             sensorData["under"] = currentUnder;
-            sensorData["object"] = currentObject;
+            sensorData["in_cargo"] = currentObject;
             
             handleSerial.sendMsg(SENSOR_STATE, sensorData.as<JsonObject>());
             lastUnder = currentUnder; 
@@ -129,41 +132,68 @@ void sensor_task(void *pvParameters) {
 }
 
 // Task đọc QR code
-void serialEvent2() {
-    char data[BUFFER_SIZE];
-    while (Serial2.available()) {
-        int len = Serial2.readBytesUntil('\n', data, BUFFER_SIZE - 1);
-        if (len > 0) {
-            data[len] = '\0';
-            String dataStr = String(data);
-            dataStr.trim();
-            JsonDocument qrData;
-            qrData["code"] = dataStr;
+// void serialEvent2() {
+//     char data[BUFFER_SIZE];
+//     while (Serial2.available()) {
+//         int len = Serial2.readBytesUntil('\n', data, BUFFER_SIZE - 1);
+//         if (len > 0) {
+//             data[len] = '\0';
+//             String dataStr = String(data);
+//             dataStr.trim();
+//             JsonDocument qrData;
+//             qrData["code"] = dataStr;
             
-            // Send formatted message using HandleSerial
-            handleSerial.sendMsg(QR_STATE, qrData.as<JsonObject>());
-        }
-    }
-}
+//             // Send formatted message using HandleSerial
+//             handleSerial.sendMsg(QR_STATE, qrData.as<JsonObject>());
+//         }
+//     }
+// }
 
 void serialEvent() {
     char buffer[BUFFER_SIZE];
     char* message;
+    
     while (Serial.available()) {
+        // Clear buffer first
+        memset(buffer, 0, BUFFER_SIZE);
+        
+        // Read serial data
         int len = Serial.readBytesUntil('\n', buffer, BUFFER_SIZE - 1);
-        if (len > 0) {
-            buffer[len] = '\0';
-            char* jsonStart = buffer;
-            if (buffer[0] == '>') {
-                jsonStart = buffer + 1;
-                message = strdup(jsonStart);
-            }
-            // Serial.printf("Serial Event - Received message: %s\n", message);
-            if (xQueueSend(receiveMsgQueue, &message, pdMS_TO_TICKS(100)) != pdPASS) {
-                Serial.println("Queue full, message dropped");
-                free(message);
-            }
+        
+        // Validate received data
+        if (len <= 0) {
+            Serial.println("Serial Event - Empty message received");
+            continue;
         }
+
+        // Ensure null termination
+        buffer[len] = '\0';
+
+        // Check message format
+        if (buffer[0] != '>') {
+            Serial.println("Serial Event - Invalid message format \n");
+            
+            Serial.println(buffer);
+            continue;
+        }
+
+        // Skip '>' character and create message copy
+        char* jsonStart = buffer + 1;
+        message = strdup(jsonStart);
+        
+        if (!message) {
+            Serial.println("Serial Event - Memory allocation failed");
+            continue;
+        }
+
+        // Try to send to queue
+        if (xQueueSend(receiveMsgQueue, &message, pdMS_TO_TICKS(100)) != pdPASS) {
+            Serial.println("Serial Event - Queue full, message dropped");
+            free(message);
+            continue;
+        }
+
+        Serial.printf("Serial Event - Message queued: %s\n", jsonStart);
     }
 }
 
@@ -204,15 +234,15 @@ void setup() {
         0                   // Gắn vào lõi 0
     );
 
-    xTaskCreatePinnedToCore(
-        sensor_task,
-        "sensor_task",
-        2048,
-        NULL,
-        1,
-        &sensorTaskHandle,
-        1                   // Gắn vào lõi 1
-    );
+    // xTaskCreatePinnedToCore(
+    //     sensor_task,
+    //     "sensor_task",
+    //     2048,
+    //     NULL,
+    //     1,
+    //     &sensorTaskHandle,
+    //     1                   // Gắn vào lõi 1
+    // );
 
     xTaskCreatePinnedToCore(
         handleMesTask,
@@ -233,37 +263,33 @@ void loop() {
 }
 
 void readLimitSwitch() {
-    static uint8_t lastState = IDLE;
-    static uint32_t lastDebounceTime = 0;
-    const uint32_t DEBOUNCE_DELAY = 50; // 50ms debounce
+    JsonDocument doorState;
+    static bool currentState;
 
-    // Đọc trạng thái công tắc hành trình
     boxInfo.limitSwitchOpen = digitalRead(LS1_PIN);
     boxInfo.limitSwitchClose = digitalRead(LS2_PIN);
-    uint8_t currentState;
+    
+    // Serial.printf("Limit Switch Open: %d, Limit Switch Close: %d\n", boxInfo.limitSwitchOpen, boxInfo.limitSwitchClose);
 
-    // Xác định trạng thái cửa
+    // Send formatted message using HandleSerial
     if (boxInfo.limitSwitchOpen == 1 && boxInfo.limitSwitchClose == 0) {
-        currentState = OPEN;
+        currentState = true;
+        motorControl.hold();
+        // Serial.println(currentState);
+        // Serial.println("Door is open");
     } else if (boxInfo.limitSwitchOpen == 0 && boxInfo.limitSwitchClose == 1) {
-        currentState = CLOSE;
-    } else {
-        currentState = IDLE;
-    }
-
-    // Chỉ cập nhật khi đã qua thời gian debounce và trạng thái thay đổi
-    if ((millis() - lastDebounceTime) > DEBOUNCE_DELAY) {
-        if (currentState != lastState) {
-            lastDebounceTime = millis();
-            boxInfo.isOpen = currentState;
-            
-            // Gửi thông tin khi có thay đổi
-            JsonDocument doorState;
-            doorState.clear();  // Clear document trước khi sử dụng
-            doorState["is_open"] = currentState;
-            handleSerial.sendMsg(DOOR_STATE, doorState.as<JsonObject>());
-            
-            lastState = currentState;
-        }
+        currentState = false;
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        motorControl.hold();
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        motorControl.stop();
+        // Serial.println(currentState);
+        // Serial.println("Door is close");
+    } 
+    if(currentState != boxInfo.isOpen) {
+        boxInfo.isOpen = currentState;
+        doorState.clear();
+        doorState["is_open"] = boxInfo.isOpen;
+        handleSerial.sendMsg(DOOR_STATE, doorState.as<JsonObject>());
     }
 }

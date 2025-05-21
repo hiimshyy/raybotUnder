@@ -23,11 +23,11 @@ enum StateType{
     SENSOR_STATE,
 } state_type;
 
-enum DoorState{
-    CLOSE = 0,
-    OPEN,
-    IDLE,
-} door_state;
+// enum DoorState{
+//     CLOSE = 0,
+//     OPEN,
+//     IDLE,
+// } door_state;
 
 #endif
 

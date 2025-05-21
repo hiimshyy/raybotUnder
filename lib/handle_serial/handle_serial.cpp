@@ -11,6 +11,7 @@ void HandleSerial::sendMsg(const uint8_t state_type, const JsonObject data) {
     doc["data"] = data;
     
     String jsonString;
+    jsonString.clear();
     serializeJson(doc, jsonString);
     
     std::string formattedMsg = ">" + std::string(jsonString.c_str()) + "\r\n";
@@ -24,6 +25,7 @@ void HandleSerial::sendACK(const std::string id, const uint8_t status) {
     doc["status"] = status;
     
     String jsonString;
+    jsonString.clear();
     serializeJson(doc, jsonString);
     
     std::string formattedMsg = ">" + std::string(jsonString.c_str()) + "\r\n";

@@ -14,6 +14,7 @@ public:
     void open(uint8_t speed);
     void close(uint8_t speed);
     void stop();
+    void hold();
     uint8_t detecTarget(uint8_t maxSpeed, uint8_t distanceCM);
 private:
     uint8_t     _pwm1Pin;
@@ -23,7 +24,7 @@ private:
     uint8_t     _pwmRes;
     uint8_t     target;
 
-    
+    void rampSpeed(uint32_t startSpeed, uint32_t targetSpeed, uint32_t steps, uint8_t channel);
 };
 
 #endif
