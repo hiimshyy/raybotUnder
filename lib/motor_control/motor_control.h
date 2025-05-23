@@ -5,6 +5,23 @@
 
 #define PWM_CHANNEL1   0
 #define PWM_CHANNEL2   1
+#define MAX_SPEED      1023
+#define MIN_SPEED      0
+
+typedef struct motor_control_data
+{
+    uint8_t  speed;
+    uint8_t  direction;
+    uint8_t  step;
+} motor_control_data_t;
+
+
+enum class MotorState {
+    STOPPED,
+    OPENING,
+    CLOSING,
+    HOLDING
+};
 
 class MotorControl {
 public:
@@ -15,7 +32,6 @@ public:
     void close(uint8_t speed);
     void stop();
     void hold();
-    uint8_t detecTarget(uint8_t maxSpeed, uint8_t distanceCM);
 private:
     uint8_t     _pwm1Pin;
     uint8_t     _pwm2Pin;
@@ -23,8 +39,13 @@ private:
     uint16_t    _pwmFreq;
     uint8_t     _pwmRes;
     uint8_t     target;
+    MotorState  _state;
+    uint8_t     _direction;
 
     void rampSpeed(uint32_t startSpeed, uint32_t targetSpeed, uint32_t steps, uint8_t channel);
+    uint8_t detecTarget(uint8_t maxSpeed, uint8_t distanceCM);
+    //chuong
+    void setMotorState(MotorState newState);
 };
 
 #endif

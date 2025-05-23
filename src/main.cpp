@@ -59,19 +59,20 @@ void motor_control_task(void *pvParameters) {
             }
 
             if (boxInfo.doorState == 0 && boxInfo.isOpen == true) {
-                // currentSpeed = boxInfo.motorSpeed;
+                currentSpeed = boxInfo.motorSpeed;
+                 
                 currentSpeed = 50;
                 isRunning = true;
                 motorControl.close(currentSpeed);
             } else if (boxInfo.doorState == 1 && boxInfo.isOpen == false) {
-                // currentSpeed = boxInfo.motorSpeed;
-                currentSpeed = 80;
+                currentSpeed = boxInfo.motorSpeed;
+                // currentSpeed = 80;
                 isRunning = true;
                 motorControl.open(currentSpeed);
             } 
-            // else {
-            //     motorControl.stop();
-            // }
+            else {
+                motorControl.stop();
+            }
         } else {
             if (lastEnable != boxInfo.motorState) {
                 motorControl.disable();
@@ -162,7 +163,7 @@ void serialEvent() {
         
         // Validate received data
         if (len <= 0) {
-            Serial.println("Serial Event - Empty message received");
+            // Serial.println("Serial Event - Empty message received");
             continue;
         }
 
@@ -171,7 +172,7 @@ void serialEvent() {
 
         // Check message format
         if (buffer[0] != '>') {
-            Serial.println("Serial Event - Invalid message format \n");
+            // Serial.println("Serial Event - Invalid message format \n");
             
             Serial.println(buffer);
             continue;
@@ -182,18 +183,18 @@ void serialEvent() {
         message = strdup(jsonStart);
         
         if (!message) {
-            Serial.println("Serial Event - Memory allocation failed");
+            // Serial.println("Serial Event - Memory allocation failed");
             continue;
         }
 
         // Try to send to queue
         if (xQueueSend(receiveMsgQueue, &message, pdMS_TO_TICKS(100)) != pdPASS) {
-            Serial.println("Serial Event - Queue full, message dropped");
+            // Serial.println("Serial Event - Queue full, message dropped");
             free(message);
             continue;
         }
 
-        Serial.printf("Serial Event - Message queued: %s\n", jsonStart);
+        // Serial.printf("Serial Event - Message queued: %s\n", jsonStart);
     }
 }
 
@@ -279,9 +280,9 @@ void readLimitSwitch() {
         // Serial.println("Door is open");
     } else if (boxInfo.limitSwitchOpen == 0 && boxInfo.limitSwitchClose == 1) {
         currentState = false;
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        motorControl.hold();
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        // vTaskDelay(pdMS_TO_TICKS(1000));
+        // // motorControl.hold();
+        // vTaskDelay(pdMS_TO_TICKS(1000));
         motorControl.stop();
         // Serial.println(currentState);
         // Serial.println("Door is close");

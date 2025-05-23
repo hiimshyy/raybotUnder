@@ -1,86 +1,153 @@
-#Esp32 Function
+# RayBot Under - Smart Box Control System
+
+## Overview
+RayBot Under is an automated box control system using ESP32. The system controls the opening and closing of a box with precise motor control, distance sensing, and serial communication capabilities.
+
+## Features
+- Automated box opening/closing control
+- Distance sensing for object detection
+- Serial communication for command and status
+- Limit switch support for position detection
+- PWM-based motor control with soft start/stop
+- QR code reading support
+- FreeRTOS task management
+
+## Hardware Requirements
+- ESP32 Development Board
+- DC Motor with driver
+- Sharp IR Distance Sensors (GP2Y0A21YK)
+- Limit Switches (2x)
+- QR Code Scanner (Optional)
+
+## Pin Configuration
+```cpp
+// Motor Control Pins
+#define EN_MT_PIN      21  // Motor Enable
+#define PWM1_PIN       19  // Motor PWM 1
+#define PWM2_PIN       18  // Motor PWM 2
+
+// Limit Switch Pins
+#define LS1_PIN        34  // Open position
+#define LS2_PIN        35  // Close position
+
+// Sensor Pins
+#define ADC1_PIN       26  // Under sensor
+#define ADC2_PIN       27  // Object detection sensor
 ```
-- Motor control 
-  + IO19: EN_MT - output
-  + IO18: PWM1 - output
-  + IO15: PWM2 - output
-- USB debug: uart1
-- Read sensor: 
-  + IO32: AI1 - analog input
-  + IO33: AI2 - analog input
-- Read limit switch:
-  + IO26: LS2 - digital input
-  + IO27: LS1 - digital input
-- QR code: uart2
+
+## Software Architecture
+
+### Core Components
+
+1. **Motor Control (`MotorControl` class)**
+   - PWM-based motor control
+   - Soft start/stop functionality
+   - Direction control
+   - State management (STOPPED, OPENING, CLOSING, HOLDING)
+
+2. **Distance Sensing (`DistanceSensor` class)**
+   - Sharp IR sensor support
+   - Multiple sensor model support
+   - Median filtering
+   - Distance calculation
+
+3. **Serial Communication (`HandleSerial` class)**
+   - JSON-based protocol
+   - Command parsing
+   - Status reporting
+   - Acknowledgment handling
+
+### Task Structure
+- `motor_control_task`: Handles motor operations
+- `sensor_task`: Manages distance sensors
+- `handleMesTask`: Processes serial commands
+- `serialEvent`: Handles incoming serial data
+
+## Communication Protocol
+
+### Incoming Commands
+```json
+{
+    "id": "command_id",
+    "type": 0,
+    "data": {
+        "state": 0/1,      // 0:close, 1:open
+        "speed": 0-100,    // Motor speed
+        "enable": 0/1      // Motor enable
+    }
+}
 ```
 
-# lib:
-- sensor: 
-  + sort
-  + filter
-  + median
-- QR code:
-  + qrcode
-  + qrparser
-- motor control:
-  + open
-  + close
-  + stop
-  + detecTarget
-- limit switch:
-  + readLimitSwitch
-- debug:
-  + serialRead
-  + handleSerial
-  + handleCommand
-  + handleMessage
-
---- Motor control ---
-// Basic sketch for trying out the Adafruit DRV8871 Breakout
-
-#define MOTOR_IN1 9
-#define MOTOR_IN2 10
-
-void setup() {
-  Serial.begin(9600);
-
-  Serial.println("DRV8871 test");
-  
-  pinMode(MOTOR_IN1, OUTPUT);
-  pinMode(MOTOR_IN2, OUTPUT);
+### Status Messages
+```json
+{
+    "type": 0,
+    "state_type": 0-3,
+    "data": {
+        // Varies based on state_type
+    }
 }
+```
 
-void loop() {
+## Setup and Installation
 
-  // ramp up forward
-  digitalWrite(MOTOR_IN1, LOW);
-  for (int i=0; i<255; i++) {
-    analogWrite(MOTOR_IN2, i);
-    delay(10);
-  }
+1. **Dependencies**
+   - Arduino IDE with ESP32 support
+   - Required Libraries:
+     - ArduinoJson
+     - FreeRTOS
 
-  // forward full speed for one second
-  delay(1000);
-  
-  // ramp down forward
-  for (int i=255; i>=0; i--) {
-    analogWrite(MOTOR_IN2, i);
-    delay(10);
-  }
+2. **Configuration**
+   - Set correct pin assignments in `config.h`
+   - Adjust PWM parameters if needed
+   - Configure serial baud rates
 
-  // ramp up backward
-  digitalWrite(MOTOR_IN2, LOW);
-  for (int i=0; i<255; i++) {
-    analogWrite(MOTOR_IN1, i);
-    delay(10);
-  }
+3. **Building**
+   ```bash
+   platformio run
+   ```
 
-  // backward full speed for one second
-  delay(1000);
+4. **Uploading**
+   ```bash
+   platformio run --target upload
+   ```
 
-  // ramp down backward
-  for (int i=255; i>=0; i--) {
-    analogWrite(MOTOR_IN1, i);
-    delay(10);
-  }
-}
+## Usage
+
+1. **Initial Setup**
+   - Connect power supply
+   - Connect serial interface
+   - Ensure limit switches are properly positioned
+
+2. **Operation**
+   - System starts in disabled state
+   - Send enable command to activate
+   - Use open/close commands with desired speed
+   - Monitor status through serial interface
+
+3. **Monitoring**
+   - Use serial monitor at 9600 baud
+   - Check sensor readings and motor status
+   - Monitor limit switch states
+
+## Troubleshooting
+
+Common issues and solutions:
+1. Motor doesn't move
+   - Check enable pin state
+   - Verify PWM signals
+   - Check power supply
+
+2. Sensors not reading
+   - Verify ADC connections
+   - Check sensor positioning
+   - Validate sensor model selection
+
+## Contributing
+Feel free to submit issues and enhancement requests.
+
+## License
+[Your chosen license]
+
+## Authors
+hiim$hyy - Cao Tien Sy
